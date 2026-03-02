@@ -46,6 +46,13 @@ body {
   position: relative;
   overflow: hidden;
 }
+.banner-accent-line {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--accent2), var(--accent), transparent);
+  opacity: 0.5;
+}
 .game-banner::before {
   content: '';
   position: absolute;
@@ -184,6 +191,7 @@ body {
 <body>
 <div class="app">
   <div class="game-banner">
+    <div class="banner-accent-line"></div>
     <div class="banner-top">
       <div class="banner-icon">&#x2728;</div>
       <div class="banner-text">
@@ -202,6 +210,7 @@ body {
     <div class="toolbar-right">
       <label class="toggle-row"><input type="checkbox" id="showZh" checked><span>&#20013;&#25991;</span></label>
       <label class="toggle-row"><input type="checkbox" id="showEn"><span>&#33521;&#25991;</span></label>
+      <label class="toggle-row"><input type="checkbox" id="showChoices" checked><span>&#36984;&#38917;</span></label>
       <label class="toggle-row"><input type="checkbox" id="showCond"><span>&#26781;&#20214;</span></label>
       <div class="view-toggle">
         <button class="view-btn active" data-view="narrative" id="viewNarrative">&#25944;&#20107;</button>
@@ -260,7 +269,7 @@ const GROUP_NAMES_ZH = {
   'Potion': '\u85E5\u6C34', 'Hailey': '\u6D77\u8389'
 };
 
-let DATA = null, searchQuery = '', showZh = true, showEn = false, showCond = false;
+let DATA = null, searchQuery = '', showZh = true, showEn = false, showChoices = true, showCond = false;
 let currentView = 'narrative', openSections = new Set(), charFilter = null;
 
 async function loadData() {
@@ -367,6 +376,15 @@ function tagClass(tag) {
   return 'tag-default';
 }
 
+function extractConditions(text) {
+  if (!text) return [];
+  const conds = [];
+  const re = /\((?:if|else-if|unless):\s*([^)]+)\)/gi;
+  let m;
+  while ((m = re.exec(text)) !== null) { conds.push(m[1].trim()); }
+  return conds;
+}
+
 function formatText(s) {
   if (!s) return '';
   let text = s;
@@ -393,6 +411,16 @@ function passageHtml(p) {
   const tags = (p.tags && p.tags.length > 0) ? '<div class="tag-row">' + p.tags.map(t => '<span class="tag ' + tagClass(t) + '">' + escHtml(t) + '</span>').join('') + '</div>' : '';
   const chars = (p.characters && p.characters.length > 0) ? '<div class="char-pills">' + p.characters.map(c => { const color = CHAR_COLORS[c] || '#64748b'; return '<span class="char-pill" style="background:' + color + '18;color:' + color + ';border:1px solid ' + color + '33" onclick="filterByChar(\'' + c + '\')">' + (GROUP_NAMES_ZH[c]||c) + '</span>'; }).join('') + '</div>' : '';
 
+  let condHtml = '';
+  if (showCond) {
+    const conds = extractConditions(p.content || '');
+    if (conds.length > 0) {
+      condHtml = '<div class="tag-row">' + conds.slice(0, 5).map(c =>
+        '<span class="tag tag-cond" title="' + escHtml(c) + '">' + escHtml(c.length > 30 ? c.substring(0,27)+'...' : c) + '</span>'
+      ).join('') + '</div>';
+    }
+  }
+
   const TEXT_LIMIT = 3000;
   let textHtml = '';
   if (showZh && p.content_zh) {
@@ -412,7 +440,17 @@ function passageHtml(p) {
       : '<div class="text" style="color:var(--text3)">(\u7121\u5167\u5BB9)</div>';
   }
 
-  return '<div class="passage"><div class="passage-header"><span class="passage-title">' + escHtml(title) + '</span>' + pid + '</div>' + tags + chars + textHtml + '</div>';
+  // Choices from p.choices field or extracted from content
+  let choicesHtml = '';
+  if (showChoices && p.choices && p.choices.length > 0) {
+    const shown = p.choices.slice(0, 20);
+    const overflow = p.choices.length > 20 ? '<span style="font-size:11px;color:var(--text2)">+' + (p.choices.length - 20) + ' \u66F4\u591A</span>' : '';
+    choicesHtml = '<div class="choices-row">' + shown.map(c =>
+      '<span class="choice-btn" title="-> ' + escHtml(c.target || '') + '">' + escHtml(c.text) + '</span>'
+    ).join('') + overflow + '</div>';
+  }
+
+  return '<div class="passage"><div class="passage-header"><span class="passage-title">' + escHtml(title) + '</span>' + pid + '</div>' + tags + condHtml + chars + textHtml + choicesHtml + '</div>';
 }
 
 function renderChunked(container, passages, startIdx) {
@@ -605,6 +643,7 @@ function init() {
   });
   document.getElementById('showZh').addEventListener('change', e => { showZh = e.target.checked; openSections.clear(); resetAndRender(); });
   document.getElementById('showEn').addEventListener('change', e => { showEn = e.target.checked; openSections.clear(); resetAndRender(); });
+  document.getElementById('showChoices').addEventListener('change', e => { showChoices = e.target.checked; openSections.clear(); resetAndRender(); });
   document.getElementById('showCond').addEventListener('change', e => { showCond = e.target.checked; openSections.clear(); resetAndRender(); });
   document.getElementById('viewNarrative').addEventListener('click', () => setActiveView('narrative'));
   document.getElementById('viewScene').addEventListener('click', () => setActiveView('scene'));
